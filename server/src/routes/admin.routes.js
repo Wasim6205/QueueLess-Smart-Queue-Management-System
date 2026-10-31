@@ -1,25 +1,32 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/admin.controller');
+const { requireAuth, requireRole } = require('../middleware/auth');
 const {
   validateObjectIdParam,
   validateWalkinBody,
   validateOpenToggleBody,
 } = require('../middleware/validate');
 
-// Queue routes
-router.get('/queue/:serviceId', validateObjectIdParam('serviceId'), adminController.getQueue);
-router.post('/queue/:serviceId/next', validateObjectIdParam('serviceId'), adminController.callNext);
-router.post('/queue/:serviceId/walkin', validateObjectIdParam('serviceId'), validateWalkinBody, adminController.addWalkin);
-router.post('/queue/:serviceId/reset', validateObjectIdParam('serviceId'), adminController.resetQueue);
+// All admin routes require authentication
+router.use(requireAuth);
 
-// Service open/closed toggle
-router.patch('/services/:serviceId/open', validateObjectIdParam('serviceId'), validateOpenToggleBody, adminController.setOpenStatus);
+// Routes accessible by both owner and staff
+const staffAndOwner = requireRole('owner', 'staff');
+const ownerOnly = requireRole('owner');
 
-// Token action routes
-router.patch('/tokens/:id/complete', validateObjectIdParam('id'), adminController.completeToken);
-router.patch('/tokens/:id/skip', validateObjectIdParam('id'), adminController.skipToken);
-router.patch('/tokens/:id/cancel', validateObjectIdParam('id'), adminController.cancelToken);
+// Queue operations (owner + staff)
+router.get('/queue/:serviceId', staffAndOwner, validateObjectIdParam('serviceId'), adminController.getQueue);
+router.post('/queue/:serviceId/next', staffAndOwner, validateObjectIdParam('serviceId'), adminController.callNext);
+router.post('/queue/:serviceId/walkin', staffAndOwner, validateObjectIdParam('serviceId'), validateWalkinBody, adminController.addWalkin);
+
+// Token actions (owner + staff)
+router.patch('/tokens/:id/complete', staffAndOwner, validateObjectIdParam('id'), adminController.completeToken);
+router.patch('/tokens/:id/skip', staffAndOwner, validateObjectIdParam('id'), adminController.skipToken);
+router.patch('/tokens/:id/cancel', staffAndOwner, validateObjectIdParam('id'), adminController.cancelToken);
+
+// Owner-only operations
+router.patch('/services/:serviceId/open', ownerOnly, validateObjectIdParam('serviceId'), validateOpenToggleBody, adminController.setOpenStatus);
+router.post('/queue/:serviceId/reset', ownerOnly, validateObjectIdParam('serviceId'), adminController.resetQueue);
 
 module.exports = router;
-

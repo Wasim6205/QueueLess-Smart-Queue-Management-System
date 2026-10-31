@@ -1,13 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import confetti from 'canvas-confetti';
 import { useToken } from '../hooks/useToken';
 import { tokensApi, getErrorMessage } from '../api/client';
 import StatusPill from '../components/StatusPill';
-import TokenBadge from '../components/TokenBadge';
+import QueueVisualizer from '../components/QueueVisualizer';
+import AnimatedNumber from '../components/ui/AnimatedNumber';
+import Button from '../components/ui/Button';
+import Modal from '../components/ui/Modal';
 import { useToast } from '../components/Toast';
+import { playChime } from '../lib/audio';
 import {
   Clock,
-  Users,
   CheckCircle,
   AlertTriangle,
   ArrowLeft,
@@ -15,6 +20,10 @@ import {
   Sparkles,
   Loader2,
   BellRing,
+  Volume2,
+  VolumeX,
+  Share2,
+  Ticket,
 } from 'lucide-react';
 
 export default function TokenPage() {
@@ -22,13 +31,37 @@ export default function TokenPage() {
   const { addToast } = useToast();
 
   const [cancelling, setCancelling] = useState(false);
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [chimeMuted, setChimeMuted] = useState(
+    () => localStorage.getItem('queueless:chimeMuted') === 'true'
+  );
 
-  const { data, loading, error, refetch } = useToken(tokenId, (notification) => {
+  const prevStatusRef = useRef(null);
+
+  const toggleChime = () => {
+    setChimeMuted((prev) => {
+      const next = !prev;
+      localStorage.setItem('queueless:chimeMuted', String(next));
+      addToast(next ? 'Turn chime muted' : 'Turn chime enabled', 'info');
+      return next;
+    });
+  };
+
+  const handleNotify = (notification) => {
     if (notification.type === 'NEXT') {
       addToast("You're next in line! Please head towards the counter.", 'alert', 'Next in Line');
+      if (!chimeMuted) playChime();
     } else if (notification.type === 'CALLED') {
       addToast("It's your turn! Please proceed to the service counter.", 'success', 'Your Turn!');
+      if (!chimeMuted) playChime();
+      try {
+        confetti({
+          particleCount: 90,
+          spread: 80,
+          origin: { y: 0.5 },
+          colors: ['#2DBE7A', '#F2683C', '#1B4D3B', '#F2A93B'],
+        });
+      } catch (e) {}
     } else if (notification.type === 'SKIPPED') {
       addToast('Your token was skipped by staff.', 'error', 'Token Skipped');
     } else if (notification.type === 'COMPLETED') {
@@ -36,14 +69,35 @@ export default function TokenPage() {
     } else if (notification.type === 'CANCELLED') {
       addToast('Your token has been cancelled.', 'info', 'Cancelled');
     }
-  });
+  };
+
+  const { data, loading, error, refetch } = useToken(tokenId, handleNotify);
+
+  // Monitor status changes for celebration on serving
+  useEffect(() => {
+    if (data?.token?.status) {
+      const currStatus = data.token.status;
+      if (currStatus === 'serving' && prevStatusRef.current && prevStatusRef.current !== 'serving') {
+        if (!chimeMuted) playChime();
+        try {
+          confetti({
+            particleCount: 90,
+            spread: 80,
+            origin: { y: 0.5 },
+            colors: ['#2DBE7A', '#F2683C', '#1B4D3B', '#F2A93B'],
+          });
+        } catch (e) {}
+      }
+      prevStatusRef.current = currStatus;
+    }
+  }, [data?.token?.status, chimeMuted]);
 
   const handleCancel = async () => {
     try {
       setCancelling(true);
       await tokensApi.cancel(tokenId);
       addToast('Your token has been cancelled.', 'info');
-      setShowCancelConfirm(false);
+      setShowCancelModal(false);
       refetch();
     } catch (err) {
       addToast(getErrorMessage(err), 'error');
@@ -54,28 +108,27 @@ export default function TokenPage() {
 
   if (loading) {
     return (
-      <div className="max-w-xl mx-auto px-4 py-16 text-center">
-        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto mb-4" />
-        <p className="text-slate-500 text-sm">Loading your live token status…</p>
+      <div className="max-w-xl mx-auto px-4 py-20 text-center">
+        <Loader2 className="w-8 h-8 text-brand-500 animate-spin mx-auto mb-4" />
+        <p className="text-ink-muted text-sm font-medium">Connecting to live queue status…</p>
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="max-w-md mx-auto px-4 py-16 text-center">
-        <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-4">
-          <AlertTriangle className="w-6 h-6" />
+      <div className="max-w-md mx-auto px-4 py-20 text-center">
+        <div className="w-14 h-14 rounded-3xl bg-rose-100 text-rose-500 flex items-center justify-center mx-auto mb-4 shadow-warm-xs">
+          <AlertTriangle className="w-7 h-7" />
         </div>
-        <h2 className="text-xl font-bold text-slate-900 mb-2">Token Not Found</h2>
-        <p className="text-slate-500 text-sm mb-6">
+        <h2 className="font-display text-2xl font-bold text-ink mb-2">Token Not Found</h2>
+        <p className="text-ink-muted text-sm mb-6 leading-relaxed">
           {error || 'This token may have expired or the link is invalid.'}
         </p>
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 transition"
-        >
-          <ArrowLeft className="w-4 h-4" /> Book a New Token
+        <Link to="/">
+          <Button variant="primary" size="md" icon={ArrowLeft}>
+            Book a New Token
+          </Button>
         </Link>
       </div>
     );
@@ -89,226 +142,351 @@ export default function TokenPage() {
   const isCancelled = token.status === 'cancelled';
   const isNext = isWaiting && (peopleAhead === 0 || peopleAhead === 1);
 
+  // Card theme styling according to state
+  const getCardThemeClasses = () => {
+    if (isServing) {
+      return 'bg-mint-500 text-forest-900 border-mint-400 shadow-[0_0_40px_rgba(45,190,122,0.4)]';
+    }
+    if (isNext) {
+      return 'bg-forest-900 text-cream border-amber-500 ring-2 ring-amber-500/60 shadow-[0_0_35px_rgba(242,169,59,0.3)]';
+    }
+    if (isWaiting) {
+      return 'bg-forest-900 text-cream border-forest-700/80 shadow-warm-xl';
+    }
+    // Completed, skipped, or cancelled
+    return 'bg-surface text-ink border-line shadow-warm-md';
+  };
+
   return (
     <div className="max-w-xl mx-auto px-4 py-6 sm:py-10">
-      {/* Back Link */}
-      <div className="mb-4">
+      {/* Top action row */}
+      <div className="flex items-center justify-between mb-4">
         <Link
           to="/"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink transition"
         >
-          <ArrowLeft className="w-3.5 h-3.5" /> Book Another Token
+          <ArrowLeft className="w-3.5 h-3.5" /> Book Another
         </Link>
+
+        {/* Chime toggle button */}
+        {(isWaiting || isServing) && (
+          <button
+            type="button"
+            onClick={toggleChime}
+            aria-label={chimeMuted ? 'Unmute chime alert' : 'Mute chime alert'}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-surface border border-line text-ink-muted hover:text-ink shadow-warm-xs transition cursor-pointer"
+          >
+            {chimeMuted ? (
+              <>
+                <VolumeX className="w-3.5 h-3.5 text-rose-500" />
+                <span className="text-[11px]">Chime muted</span>
+              </>
+            ) : (
+              <>
+                <Volume2 className="w-3.5 h-3.5 text-mint-500" />
+                <span className="text-[11px]">Chime on</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
 
-      {/* Main Token Card */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm text-center relative overflow-hidden">
-        {/* Top status indicator & Service name */}
-        <div className="flex items-center justify-between mb-6">
-          <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
+      {/* Ticket-style Main Card */}
+      <motion.div
+        layout
+        transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+        className={`rounded-4xl border p-6 sm:p-8 text-center relative overflow-hidden transition-colors duration-300 ${getCardThemeClasses()}`}
+      >
+        {/* Scalloped Perforated Edge Notches (Authentic physical ticket aesthetic) */}
+        <div className="absolute -left-3.5 top-36 w-7 h-7 rounded-full bg-cream border border-line pointer-events-none" />
+        <div className="absolute -right-3.5 top-36 w-7 h-7 rounded-full bg-cream border border-line pointer-events-none" />
+
+        {/* Card Header */}
+        <div className="flex items-center justify-between mb-5">
+          <span
+            className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full font-display border ${
+              isServing
+                ? 'bg-forest-900/15 text-forest-900 border-forest-900/20'
+                : isWaiting
+                ? 'bg-forest-800 text-brand-500 border-forest-700/60'
+                : 'bg-forest-100 text-forest-700 border-forest-700/20'
+            }`}
+          >
             {service?.name || 'Service'}
           </span>
           <StatusPill status={token.status} size="md" />
         </div>
 
-        {/* Customer greeting */}
-        <div className="mb-4">
-          <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">
+        {/* Customer Name */}
+        <div className="mb-2">
+          <p
+            className={`text-[11px] font-bold uppercase tracking-wider ${
+              isServing ? 'text-forest-900/70' : isWaiting ? 'text-cream/60' : 'text-ink-muted'
+            }`}
+          >
             Customer
           </p>
-          <h2 className="text-xl font-bold text-slate-800">{token.customerName}</h2>
+          <h2
+            className={`font-display text-2xl font-black tracking-tight mt-0.5 ${
+              isServing ? 'text-forest-900' : isWaiting ? 'text-cream' : 'text-ink'
+            }`}
+          >
+            {token.customerName}
+          </h2>
         </div>
 
-        {/* Token Badge */}
-        <div className="my-6">
-          <TokenBadge tokenCode={token.tokenCode} />
+        {/* Giant Token Code Display */}
+        <div className="my-5">
+          <div
+            className={`inline-flex items-center justify-center px-10 py-5 rounded-3xl border transition-all ${
+              isServing
+                ? 'bg-forest-900 text-cream border-forest-900 shadow-warm-md'
+                : 'bg-forest-950/80 text-cream border-forest-700/60 shadow-warm-lg'
+            }`}
+          >
+            <span
+              className={`font-display font-black tracking-wider text-5xl sm:text-6xl drop-shadow-sm tabular-nums ${
+                isServing ? 'text-mint-400' : isNext ? 'text-amber-400' : 'text-cream'
+              }`}
+            >
+              {token.tokenCode || '---'}
+            </span>
+          </div>
         </div>
 
-        {/* Dynamic Status Banners */}
+        {/* Dynamic State Alert Banners */}
         {isServing && (
-          <div className="mb-6 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 animate-pulse">
-            <div className="flex items-center justify-center gap-2 font-bold text-base">
-              <Sparkles className="w-5 h-5 text-emerald-600" />
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="mb-6 p-4 rounded-3xl bg-forest-900 text-cream shadow-warm-md"
+          >
+            <div className="flex items-center justify-center gap-2 font-display font-black text-base sm:text-lg tracking-tight">
+              <Sparkles className="w-5 h-5 text-mint-400 animate-pulse" />
               <span>It's Your Turn! Please proceed to the counter.</span>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {isNext && (
-          <div className="mb-6 p-4 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-900">
-            <div className="flex items-center justify-center gap-2 font-bold text-sm">
-              <BellRing className="w-4 h-4 text-indigo-600" />
-              <span>You're Next! Please head towards the waiting area.</span>
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="mb-6 p-4 rounded-3xl bg-amber-500 text-forest-900 shadow-warm-md"
+          >
+            <div className="flex items-center justify-center gap-2 font-display font-bold text-sm tracking-tight">
+              <BellRing className="w-4 h-4 animate-bounce" />
+              <span>You're next in line! Please be ready at the waiting area.</span>
             </div>
-          </div>
+          </motion.div>
         )}
 
-        {isCompleted && (
-          <div className="mb-6 p-5 rounded-2xl bg-slate-100 border border-slate-200 text-slate-700">
-            <CheckCircle className="w-8 h-8 text-slate-500 mx-auto mb-2" />
-            <h3 className="font-bold text-base text-slate-900">Service Completed</h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Thank you for visiting! We hope you had a pleasant experience.
-            </p>
-            <div className="mt-4">
-              <Link
-                to="/"
-                className="inline-block px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition"
-              >
-                Book Another Token
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {isSkipped && (
-          <div className="mb-6 p-5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800">
-            <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto mb-2" />
-            <h3 className="font-bold text-base text-rose-900">Your Token Was Skipped</h3>
-            <p className="text-xs text-rose-600 mt-1">
-              Please speak with staff at the counter or generate a new token.
-            </p>
-            <div className="mt-4">
-              <Link
-                to="/"
-                className="inline-block px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 transition"
-              >
-                Book Again
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {isCancelled && (
-          <div className="mb-6 p-5 rounded-2xl bg-zinc-100 border border-zinc-200 text-zinc-700">
-            <XCircle className="w-8 h-8 text-zinc-400 mx-auto mb-2" />
-            <h3 className="font-bold text-base text-zinc-900">Token Cancelled</h3>
-            <p className="text-xs text-zinc-500 mt-1">
-              This token has been cancelled.
-            </p>
-            <div className="mt-4">
-              <Link
-                to="/"
-                className="inline-block px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition"
-              >
-                Book a New Token
-              </Link>
-            </div>
-          </div>
+        {/* Interactive Queue Visualizer (When waiting or serving) */}
+        {(isWaiting || isServing) && (
+          <QueueVisualizer
+            peopleAhead={peopleAhead ?? 0}
+            position={position ?? 1}
+            isServing={isServing}
+            isNext={isNext}
+            nowServingCode={nowServing?.tokenCode || null}
+          />
         )}
 
         {/* Live Metrics Grid (For Waiting & Serving) */}
         {(isWaiting || isServing) && (
           <>
-            <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="grid grid-cols-3 gap-2.5 sm:gap-3 mb-3">
               {/* Now Serving */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+              <div
+                className={`p-3.5 sm:p-4 rounded-2xl border text-center ${
+                  isServing
+                    ? 'bg-forest-900/10 border-forest-900/15 text-forest-900'
+                    : 'bg-forest-950/60 border-forest-700/50 text-cream'
+                }`}
+              >
+                <span
+                  className={`text-[10px] font-bold uppercase tracking-wider block mb-1 ${
+                    isServing ? 'text-forest-900/70' : 'text-cream/60'
+                  }`}
+                >
                   Now Serving
                 </span>
-                <span className="text-base sm:text-lg font-bold font-mono text-emerald-600">
+                <span
+                  className={`text-base sm:text-lg font-display font-black tabular-nums ${
+                    isServing ? 'text-forest-900' : 'text-mint-400'
+                  }`}
+                >
                   {nowServing ? nowServing.tokenCode : 'None'}
                 </span>
               </div>
 
               {/* People Ahead */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+              <div
+                className={`p-3.5 sm:p-4 rounded-2xl border text-center ${
+                  isServing
+                    ? 'bg-forest-900/10 border-forest-900/15 text-forest-900'
+                    : 'bg-forest-950/60 border-forest-700/50 text-cream'
+                }`}
+              >
+                <span
+                  className={`text-[10px] font-bold uppercase tracking-wider block mb-1 ${
+                    isServing ? 'text-forest-900/70' : 'text-cream/60'
+                  }`}
+                >
                   Ahead of You
                 </span>
-                <span className="text-base sm:text-lg font-bold text-slate-800">
-                  {isServing ? '0' : peopleAhead ?? '—'}
+                <span
+                  className={`text-base sm:text-lg font-display font-black tabular-nums ${
+                    isServing ? 'text-forest-900' : 'text-cream'
+                  }`}
+                >
+                  {isServing ? '0' : <AnimatedNumber value={peopleAhead ?? 0} />}
                 </span>
               </div>
 
               {/* Estimated Wait */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+              <div
+                className={`p-3.5 sm:p-4 rounded-2xl border text-center ${
+                  isServing
+                    ? 'bg-forest-900/10 border-forest-900/15 text-forest-900'
+                    : 'bg-forest-950/60 border-forest-700/50 text-cream'
+                }`}
+              >
+                <span
+                  className={`text-[10px] font-bold uppercase tracking-wider block mb-1 ${
+                    isServing ? 'text-forest-900/70' : 'text-cream/60'
+                  }`}
+                >
                   Est. Wait
                 </span>
-                <span className="text-base sm:text-lg font-bold text-indigo-600">
+                <span
+                  className={`text-base sm:text-lg font-display font-black tabular-nums ${
+                    isServing ? 'text-forest-900' : 'text-brand-500'
+                  }`}
+                >
                   {isServing ? '0 min' : `~${etaMinutes ?? 0} min`}
                 </span>
               </div>
             </div>
 
             {/* Disclaimer under wait tile */}
-            <p className="text-[11px] text-slate-400 italic mb-6">
+            <p
+              className={`text-[11px] italic mb-6 ${
+                isServing ? 'text-forest-900/70' : 'text-cream/60'
+              }`}
+            >
               * Estimated time. Actual wait may vary.
             </p>
           </>
         )}
 
-        {/* Progress Stepper */}
-        {(isWaiting || isServing) && (
-          <div className="mb-6 pt-2">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-500 mb-2">
-              <span className={isWaiting ? 'text-indigo-600' : 'text-slate-400'}>
-                1. In Queue (#{position || 1})
-              </span>
-              <span className={isNext ? 'text-indigo-600 font-bold' : 'text-slate-400'}>
-                2. Next Up
-              </span>
-              <span className={isServing ? 'text-emerald-600 font-bold' : 'text-slate-400'}>
-                3. Serving
-              </span>
+        {/* Tasteful Terminal States */}
+        {isCompleted && (
+          <div className="py-4">
+            <div className="w-14 h-14 rounded-full bg-forest-100 text-forest-700 flex items-center justify-center mx-auto mb-3 shadow-warm-xs">
+              <CheckCircle className="w-7 h-7" />
             </div>
-            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full transition-all duration-500 ${
-                  isServing
-                    ? 'w-full bg-emerald-500'
-                    : isNext
-                    ? 'w-2/3 bg-indigo-600'
-                    : 'w-1/3 bg-amber-400'
-                }`}
-              />
+            <h3 className="font-display font-bold text-lg text-ink">Service Completed</h3>
+            <p className="text-xs text-ink-muted mt-1 max-w-sm mx-auto leading-relaxed">
+              Thank you for visiting! We hope you had a fast and pleasant experience.
+            </p>
+            <div className="mt-6">
+              <Link to="/">
+                <Button variant="primary" size="md">
+                  Book Another Token
+                </Button>
+              </Link>
             </div>
           </div>
         )}
 
-        {/* Cancel Action (Only when waiting) */}
-        {isWaiting && (
-          <div className="pt-4 border-t border-slate-100">
-            {showCancelConfirm ? (
-              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-center animate-in fade-in">
-                <p className="text-xs font-semibold text-rose-800 mb-3">
-                  Are you sure you want to cancel your token?
-                </p>
-                <div className="flex justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowCancelConfirm(false)}
-                    disabled={cancelling}
-                    className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 min-h-[36px]"
-                  >
-                    Keep Token
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCancel}
-                    disabled={cancelling}
-                    className="px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 transition flex items-center gap-1 min-h-[36px]"
-                  >
-                    {cancelling && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    Yes, Cancel Token
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowCancelConfirm(true)}
-                className="text-xs font-medium text-slate-400 hover:text-rose-600 transition flex items-center justify-center gap-1 mx-auto min-h-[36px]"
-              >
-                <XCircle className="w-3.5 h-3.5" />
-                Cancel My Token
-              </button>
-            )}
+        {isSkipped && (
+          <div className="py-4">
+            <div className="w-14 h-14 rounded-full bg-rose-100 text-rose-500 flex items-center justify-center mx-auto mb-3 shadow-warm-xs">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+            <h3 className="font-display font-bold text-lg text-rose-900">Your Token Was Skipped</h3>
+            <p className="text-xs text-rose-700 mt-1 max-w-sm mx-auto leading-relaxed">
+              You were not present when your token was called. Please check with staff at the counter or generate a new token.
+            </p>
+            <div className="mt-6">
+              <Link to="/">
+                <Button variant="danger" size="md">
+                  Book Again
+                </Button>
+              </Link>
+            </div>
           </div>
         )}
-      </div>
+
+        {isCancelled && (
+          <div className="py-4">
+            <div className="w-14 h-14 rounded-full bg-line text-ink-muted flex items-center justify-center mx-auto mb-3 shadow-warm-xs">
+              <XCircle className="w-7 h-7" />
+            </div>
+            <h3 className="font-display font-bold text-lg text-ink">Token Cancelled</h3>
+            <p className="text-xs text-ink-muted mt-1 max-w-sm mx-auto leading-relaxed">
+              This token has been cancelled and removed from the active queue.
+            </p>
+            <div className="mt-6">
+              <Link to="/">
+                <Button variant="secondary" size="md">
+                  Book a New Token
+                </Button>
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Cancel Action Button (Only visible when token is waiting) */}
+        {isWaiting && (
+          <div className="pt-4 border-t border-forest-700/40">
+            <button
+              type="button"
+              onClick={() => setShowCancelModal(true)}
+              className="text-xs font-semibold text-cream/70 hover:text-rose-400 transition flex items-center justify-center gap-1.5 mx-auto min-h-[36px] cursor-pointer"
+            >
+              <XCircle className="w-4 h-4" />
+              <span>Cancel My Token</span>
+            </button>
+          </div>
+        )}
+      </motion.div>
+
+      {/* Cancel Confirmation Modal */}
+      <Modal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        title="Cancel Your Token?"
+      >
+        <div className="text-center">
+          <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-500 flex items-center justify-center mx-auto mb-3">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <p className="text-sm text-ink-muted mb-6 leading-relaxed">
+            Are you sure you want to leave the queue? If you cancel, you will lose your spot (#
+            {position || 1}) and will need to book a new token.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => setShowCancelModal(false)}
+              disabled={cancelling}
+            >
+              Keep My Spot
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              loading={cancelling}
+              onClick={handleCancel}
+            >
+              Yes, Cancel Token
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
-

@@ -3,19 +3,11 @@ const { Server } = require('socket.io');
 let io = null;
 
 function initSocket(server, clientOrigin) {
+  const origin = clientOrigin || 'http://localhost:5173';
+
   io = new Server(server, {
     cors: {
-      origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps, curl, or same-origin)
-        // or any localhost / 127.0.0.1 origin in dev
-        if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
-          return callback(null, true);
-        }
-        if (clientOrigin && origin === clientOrigin) {
-          return callback(null, true);
-        }
-        return callback(null, true);
-      },
+      origin,
       methods: ['GET', 'POST'],
       credentials: true,
     },

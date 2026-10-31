@@ -74,6 +74,15 @@ async function cancelToken(req, res, next) {
 
 async function resetQueue(req, res, next) {
   try {
+    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEMO_RESET !== 'true') {
+      return res.status(403).json({
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Queue reset is disabled in production.',
+        },
+      });
+    }
+
     const { serviceId } = req.params;
     const result = await queueService.resetQueue(serviceId);
     res.json(result);
@@ -92,4 +101,3 @@ module.exports = {
   cancelToken,
   resetQueue,
 };
-

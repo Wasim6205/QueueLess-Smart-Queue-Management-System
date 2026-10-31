@@ -623,6 +623,59 @@ Use **two windows side by side**: admin dashboard (left) and a phone-sized custo
 
 ---
 
+## 21. Security & Authentication
+
+QueueLess enforces role-based access control (RBAC), security headers, and rate limiting to secure all administrative actions while preserving public customer booking and live token tracking without requiring logins.
+
+### 21.1 Roles & Permissions
+
+| Role | Description | Allowed Actions |
+|------|-------------|-----------------|
+| `owner` | Clinic/Shop Owner | Full access: View queues, Call Next, Complete, Skip, Cancel, Add Walk-in, Open/Close bookings, Reset queue |
+| `staff` | Receptionist / Staff | Day-to-day operations: View queues, Call Next, Complete, Skip, Cancel, Add Walk-in |
+| *(public)* | Customer / Waiting Room Display | Book token, view own token status & ETA, view public waiting room TV screen |
+
+### 21.2 Protected vs. Public Endpoints
+
+| Endpoint | Method | Access | Requirement |
+|----------|--------|--------|-------------|
+| `/api/auth/login` | POST | Public | Max 5 failed attempts per 15 min |
+| `/api/auth/me` | GET | `owner`, `staff` | Bearer JWT |
+| `/api/admin/queue/:serviceId` | GET | `owner`, `staff` | Bearer JWT |
+| `/api/admin/queue/:serviceId/next` | POST | `owner`, `staff` | Bearer JWT |
+| `/api/admin/queue/:serviceId/walkin` | POST | `owner`, `staff` | Bearer JWT |
+| `/api/admin/tokens/:id/complete` | PATCH | `owner`, `staff` | Bearer JWT |
+| `/api/admin/tokens/:id/skip` | PATCH | `owner`, `staff` | Bearer JWT |
+| `/api/admin/tokens/:id/cancel` | PATCH | `owner`, `staff` | Bearer JWT |
+| `/api/admin/services/:serviceId/open` | PATCH | `owner` only | Bearer JWT (`role: owner`) |
+| `/api/admin/queue/:serviceId/reset` | POST | `owner` only | Bearer JWT (`role: owner`, disabled in prod unless `ENABLE_DEMO_RESET=true`) |
+| `/api/services` | GET | Public | None |
+| `/api/tokens` | POST | Public | None |
+| `/api/tokens/:id` | GET | Public | Exposes own token + Now Serving code (no third-party PII) |
+| `/api/tokens/:id/cancel` | PATCH | Public | Cancels own waiting token |
+
+### 21.3 Security Environment Variables
+
+```env
+JWT_SECRET=change-me-to-a-long-random-string
+JWT_EXPIRES_IN=8h
+OWNER_EMAIL=owner@queueless.com
+OWNER_PASSWORD=OwnerSecurePass123!
+STAFF_EMAIL=staff@queueless.com
+STAFF_PASSWORD=StaffSecurePass123!
+ENABLE_DEMO_RESET=true
+```
+
+### 21.4 How to Seed Users
+
+Run the seed script from the server directory:
+```bash
+cd server && npm run seed
+```
+This reads credentials from the environment variables, hashes passwords with bcrypt (cost 10+), and provisions the default `owner` and `staff` accounts alongside the demo services.
+
+---
+
 ## License
 
 MIT

@@ -1,6 +1,7 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Clock, Phone, SkipForward, XCircle } from 'lucide-react';
+import { springTransition } from '../lib/motion';
 
 function maskPhone(phone) {
   if (!phone || phone.length < 10) return phone || '—';
@@ -13,44 +14,46 @@ export default function QueueRow({
   onCancel,
   isProcessing = false,
 }) {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
     <motion.div
-      layout
-      initial={{ opacity: 0, y: 8 }}
+      layout={!prefersReducedMotion}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.2 }}
-      className="p-4 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
+      exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
+      transition={springTransition}
+      className="p-4 rounded-2xl border border-line bg-surface hover:border-forest-700/20 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-warm-xs"
     >
       {/* Left: Code, Name, Source badge, Phone */}
       <div className="flex items-center gap-3.5">
-        <div className="w-16 h-11 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center font-mono font-bold text-indigo-700 text-sm">
+        <div className="w-16 h-11 rounded-xl bg-forest-100 border border-forest-700/20 flex items-center justify-center font-display font-bold text-forest-900 text-sm tabular-nums shadow-xs">
           {token.tokenCode}
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-900 text-sm">
+            <span className="font-display font-bold text-ink text-sm">
               {token.customerName}
             </span>
             {token.source === 'walkin' && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-amber-50 text-amber-700 border border-amber-200">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-500/20">
                 Walk-in
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
+          <div className="flex items-center gap-3 text-xs text-ink-muted mt-0.5">
             <span className="flex items-center gap-1">
-              <Phone className="w-3 h-3 text-slate-400" />
-              {maskPhone(token.phone)}
+              <Phone className="w-3 h-3 text-ink-muted/70" />
+              <span className="tabular-nums">{maskPhone(token.phone)}</span>
             </span>
             <span>•</span>
-            <span className="flex items-center gap-1 font-medium text-slate-600">
+            <span className="flex items-center gap-1 font-semibold text-ink">
               #{token.position} in line
             </span>
             <span>•</span>
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3 text-slate-400" />
-              est. ~{token.etaMinutes}m
+            <span className="flex items-center gap-1 text-ink-muted">
+              <Clock className="w-3 h-3 text-ink-muted/70" />
+              est. ~<span className="tabular-nums">{token.etaMinutes}</span>m
             </span>
           </div>
         </div>
@@ -63,7 +66,7 @@ export default function QueueRow({
           onClick={() => onSkip(token._id)}
           disabled={isProcessing}
           title="Skip this customer"
-          className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-amber-700 hover:bg-amber-50 hover:border-amber-200 transition text-xs font-medium flex items-center gap-1 disabled:opacity-50 min-h-[36px]"
+          className="px-3 py-1.5 rounded-xl border border-line text-ink-muted hover:text-amber-800 hover:bg-amber-100 hover:border-amber-300 transition text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50 min-h-[36px] cursor-pointer"
         >
           <SkipForward className="w-3.5 h-3.5" />
           Skip
@@ -73,7 +76,7 @@ export default function QueueRow({
           onClick={() => onCancel(token._id)}
           disabled={isProcessing}
           title="Cancel this token"
-          className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-rose-700 hover:bg-rose-50 hover:border-rose-200 transition text-xs font-medium flex items-center gap-1 disabled:opacity-50 min-h-[36px]"
+          className="px-3 py-1.5 rounded-xl border border-line text-ink-muted hover:text-rose-800 hover:bg-rose-100 hover:border-rose-300 transition text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50 min-h-[36px] cursor-pointer"
         >
           <XCircle className="w-3.5 h-3.5" />
           Cancel
@@ -82,4 +85,3 @@ export default function QueueRow({
     </motion.div>
   );
 }
-

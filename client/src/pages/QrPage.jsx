@@ -1,25 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { servicesApi, getErrorMessage } from '../api/client';
-import { Printer, ArrowLeft, Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import { Printer, ArrowLeft, Loader2, Sparkles, AlertCircle, Smartphone, CheckCircle, Clock } from 'lucide-react';
+import Button from '../components/ui/Button';
 
 export default function QrPage() {
   const { serviceId } = useParams();
-  const [service, setService] = useState(null);
+  const navigate = useNavigate();
+  const [services, setServices] = useState([]);
+  const [selectedServiceId, setSelectedServiceId] = useState(serviceId || '');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    async function loadService() {
+    async function loadServices() {
       try {
         setLoading(true);
         const list = await servicesApi.list();
-        const found = list.find((s) => s._id === serviceId);
-        if (found) {
-          setService(found);
-        } else {
-          setError('Service not found');
+        setServices(list);
+        if (list.length > 0) {
+          const currentId = serviceId || list[0]._id;
+          setSelectedServiceId(currentId);
         }
       } catch (err) {
         setError(getErrorMessage(err));
@@ -27,20 +29,27 @@ export default function QrPage() {
         setLoading(false);
       }
     }
-    loadService();
+    loadServices();
   }, [serviceId]);
 
-  const bookingUrl = `${window.location.origin}/?service=${serviceId}`;
+  const service = services.find((s) => s._id === selectedServiceId);
+  const bookingUrl = `${window.location.origin}/?service=${selectedServiceId}`;
 
   const handlePrint = () => {
     window.print();
   };
 
+  const handleServiceChange = (e) => {
+    const newId = e.target.value;
+    setSelectedServiceId(newId);
+    navigate(`/qr/${newId}`, { replace: true });
+  };
+
   if (loading) {
     return (
       <div className="max-w-md mx-auto px-4 py-20 text-center">
-        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto mb-3" />
-        <p className="text-slate-500 text-sm">Loading QR poster…</p>
+        <Loader2 className="w-8 h-8 text-brand-500 animate-spin mx-auto mb-3" />
+        <p className="text-ink-muted text-sm font-medium">Preparing QR poster…</p>
       </div>
     );
   }
@@ -49,80 +58,115 @@ export default function QrPage() {
     return (
       <div className="max-w-md mx-auto px-4 py-20 text-center">
         <AlertCircle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
-        <h2 className="text-lg font-bold text-slate-800 mb-1">Failed to load QR code</h2>
-        <p className="text-sm text-slate-500 mb-4">{error || 'Service not found.'}</p>
-        <Link
-          to="/admin"
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back to Admin
+        <h2 className="font-display text-lg font-bold text-ink mb-1">Failed to load poster</h2>
+        <p className="text-sm text-ink-muted mb-4">{error || 'Service not found.'}</p>
+        <Link to="/admin">
+          <Button variant="forest" size="sm" icon={ArrowLeft}>
+            Back to Admin
+          </Button>
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 print:bg-white flex flex-col items-center justify-center p-4">
-      {/* Top action bar (hidden during print) */}
-      <div className="no-print w-full max-w-md flex items-center justify-between mb-6">
+    <div className="min-h-screen bg-cream print:bg-white flex flex-col items-center justify-center p-4 sm:p-8">
+      {/* Top Action Bar (Hidden during printing) */}
+      <div className="no-print w-full max-w-md flex items-center justify-between gap-3 mb-6">
         <Link
           to="/admin"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink transition"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Admin
         </Link>
 
-        <button
-          type="button"
-          onClick={handlePrint}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition shadow-sm"
-        >
-          <Printer className="w-4 h-4" /> Print Poster
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Quick Service Switcher Dropdown */}
+          <select
+            value={selectedServiceId}
+            onChange={handleServiceChange}
+            className="px-3 py-1.5 rounded-xl border border-line bg-surface text-xs font-bold font-display text-ink focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          >
+            {services.map((s) => (
+              <option key={s._id} value={s._id}>
+                [{s.prefix}] {s.name}
+              </option>
+            ))}
+          </select>
+
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handlePrint}
+            icon={Printer}
+          >
+            Print
+          </Button>
+        </div>
       </div>
 
-      {/* Printable Poster Card */}
-      <div className="w-full max-w-md bg-white rounded-3xl border-2 border-slate-200 print:border print:shadow-none p-8 sm:p-10 shadow-lg text-center flex flex-col items-center justify-between">
+      {/* Printable Poster Card (Clean A4 proportions) */}
+      <div className="w-full max-w-md bg-surface rounded-4xl border-2 border-line print:border-none print:shadow-none p-8 sm:p-10 shadow-warm-xl text-center flex flex-col items-center justify-between">
         {/* Brand / Header */}
         <div className="mb-6">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold uppercase tracking-wider mb-3">
-            <Sparkles className="w-3.5 h-3.5" /> QueueLess
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-forest-100 border border-forest-700/20 text-forest-900 text-xs font-bold uppercase tracking-wider mb-3">
+            <Sparkles className="w-3.5 h-3.5 text-brand-500" /> QueueLess Smart Queue
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="font-display text-3xl sm:text-4xl font-black text-ink tracking-tight leading-tight">
             {service.name}
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Skip the line. Join the digital queue in 10 seconds.
+          <p className="text-xs text-ink-muted mt-2 font-medium">
+            Join the digital queue on your phone. No app install required.
           </p>
         </div>
 
-        {/* Big QR Code */}
-        <div className="p-5 bg-white rounded-2xl border-2 border-slate-200 shadow-xs mb-6">
+        {/* Big Forest-Themed High-Contrast QR Code */}
+        <div className="p-6 bg-white rounded-3xl border-2 border-line shadow-warm-xs mb-6 inline-block">
           <QRCodeSVG
             value={bookingUrl}
             size={220}
             level="H"
+            fgColor="#0F2D22"
+            bgColor="#FFFFFF"
             includeMargin={true}
           />
         </div>
 
-        {/* Scan Callout */}
-        <div className="space-y-1.5 max-w-xs">
-          <div className="text-lg font-bold text-slate-900">
-            Scan to Join Queue
+        {/* 3-Step Scan Instructions */}
+        <div className="w-full bg-cream/70 rounded-2xl border border-line p-4 mb-6 text-left space-y-2.5">
+          <div className="flex items-center gap-2.5 text-xs text-ink">
+            <div className="w-5 h-5 rounded-full bg-brand-500 text-white flex items-center justify-center font-bold text-[10px] shrink-0">
+              1
+            </div>
+            <span>Point your phone camera at the QR code above.</span>
           </div>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Point your phone camera here to get your live token number and estimated wait time.
-          </p>
+
+          <div className="flex items-center gap-2.5 text-xs text-ink">
+            <div className="w-5 h-5 rounded-full bg-forest-700 text-white flex items-center justify-center font-bold text-[10px] shrink-0">
+              2
+            </div>
+            <span>Enter your name and mobile number.</span>
+          </div>
+
+          <div className="flex items-center gap-2.5 text-xs text-ink">
+            <div className="w-5 h-5 rounded-full bg-mint-500 text-forest-900 flex items-center justify-center font-bold text-[10px] shrink-0">
+              3
+            </div>
+            <span>Get your token and track your turn in real time!</span>
+          </div>
         </div>
 
         {/* Footer info */}
-        <div className="mt-8 pt-6 border-t border-slate-100 w-full flex items-center justify-between text-[11px] text-slate-400">
-          <span>Service Code: [{service.prefix}]</span>
-          <span>~{service.avgServiceMinutes} min / customer</span>
+        <div className="pt-4 border-t border-line/60 w-full flex items-center justify-between text-xs text-ink-muted font-medium">
+          <span>
+            Service Code: <strong className="text-ink font-bold">[{service.prefix}]</strong>
+          </span>
+          <span className="flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5 text-brand-500" />
+            <span>~<span className="tabular-nums font-bold">{service.avgServiceMinutes}</span> min per customer</span>
+          </span>
         </div>
       </div>
     </div>
   );
 }
-

@@ -1,7 +1,7 @@
 const { io } = require('../client/node_modules/socket.io-client');
 const http = require('http');
 
-function request(method, path, data = null) {
+function request(method, path, data = null, headers = {}) {
   return new Promise((resolve, reject) => {
     const options = {
       hostname: 'localhost',
@@ -10,6 +10,7 @@ function request(method, path, data = null) {
       method,
       headers: {
         'Content-Type': 'application/json',
+        ...headers,
       },
     };
 
@@ -43,10 +44,19 @@ function assert(condition, message) {
 async function runSocketTests() {
   console.log('--- Starting Real-Time Socket.IO Synchronization Verification ---');
 
-  // 1. Get a service ID and reset queue
+  // Authenticate as owner for admin actions
+  const loginRes = await request('POST', '/api/auth/login', {
+    email: 'owner@queueless.com',
+    password: 'OwnerSecurePass123!',
+  });
+  const ownerToken = loginRes.body.token;
+  const authHeader = { Authorization: `Bearer ${ownerToken}` };
+
+  // 1. Get a service ID and reset queue, ensure it is open
   const services = await request('GET', '/api/services');
   const serviceId = services.body[0]._id;
-  await request('POST', `/api/admin/queue/${serviceId}/reset`);
+  await request('PATCH', `/api/admin/services/${serviceId}/open`, { isOpen: true }, authHeader);
+  await request('POST', `/api/admin/queue/${serviceId}/reset`, null, authHeader);
 
   // 2. Connect Admin socket
   const adminSocket = io('http://localhost:5000');
@@ -105,8 +115,11 @@ async function runSocketTests() {
     customer2Events.push(payload);
   });
 
+  // Allow socket room joins to register
+  await new Promise((r) => setTimeout(r, 150));
+
   // 7. Admin calls next -> Customer 1 (Ravi)
-  await request('POST', `/api/admin/queue/${serviceId}/next`);
+  await request('POST', `/api/admin/queue/${serviceId}/next`, null, authHeader);
   await new Promise((r) => setTimeout(r, 300));
 
   assert(
@@ -120,7 +133,7 @@ async function runSocketTests() {
   );
 
   // 8. Admin completes Customer 1
-  await request('PATCH', `/api/admin/tokens/${token1Id}/complete`);
+  await request('PATCH', `/api/admin/tokens/${token1Id}/complete`, null, authHeader);
   await new Promise((r) => setTimeout(r, 300));
 
   assert(
@@ -132,7 +145,7 @@ async function runSocketTests() {
   const currentAdminCount = adminQueueUpdatedCount;
   await request('POST', `/api/admin/queue/${serviceId}/walkin`, {
     customerName: 'Walkin Socket',
-  });
+  }, authHeader);
   await new Promise((r) => setTimeout(r, 200));
   assert(adminQueueUpdatedCount > currentAdminCount, 'Admin received queue:updated on walk-in addition');
 

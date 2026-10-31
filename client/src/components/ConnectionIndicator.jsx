@@ -24,16 +24,18 @@ export default function ConnectionIndicator() {
   }, []);
 
   return (
-    <div className="flex items-center gap-2 text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200">
+    <div
+      className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-surface/80 border border-line text-ink backdrop-blur-xs select-none"
+      title={isConnected ? 'Connected to real-time server' : 'Reconnecting to real-time server…'}
+    >
       <span
         className={`w-2 h-2 rounded-full transition-colors ${
-          isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'
+          isConnected ? 'bg-mint-500 animate-pulse' : 'bg-amber-500'
         }`}
       />
-      <span className={isConnected ? 'text-slate-700' : 'text-amber-700'}>
+      <span className="text-[11px] font-semibold text-ink/80">
         {isConnected ? 'Live' : 'Connecting…'}
       </span>
     </div>
   );
 }
-

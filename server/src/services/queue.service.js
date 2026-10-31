@@ -141,7 +141,7 @@ async function bookOnlineToken({ customerName, phone, serviceId }) {
     service: serviceId,
     dateKey,
     status: 'serving',
-  }).select('tokenCode customerName calledAt');
+  }).select('tokenCode');
 
   const servingAhead = servingToken ? 1 : 0;
   const peopleAhead = waitingAhead + servingAhead;
@@ -209,7 +209,7 @@ async function addWalkinToken(serviceId, { customerName, phone }) {
     service: serviceId,
     dateKey,
     status: 'serving',
-  }).select('tokenCode customerName calledAt');
+  }).select('tokenCode');
 
   const servingAhead = servingToken ? 1 : 0;
   const peopleAhead = waitingAhead + servingAhead;
@@ -232,7 +232,8 @@ async function addWalkinToken(serviceId, { customerName, phone }) {
 }
 
 /**
- * Get individual token details with live computed position & ETA
+ * Get individual token details with live computed position & ETA.
+ * HARDENING: Public view never exposes other customers' names or phones.
  */
 async function getTokenById(tokenId) {
   const token = await Token.findById(tokenId);
@@ -274,18 +275,16 @@ async function getTokenById(tokenId) {
     etaMinutes = 0;
   }
 
+  // Hardened nowServing: ONLY exposes tokenCode, never other customers' names/phones
   const nowServingDoc = await Token.findOne({
     service: token.service,
     dateKey,
     status: 'serving',
-  }).select('_id tokenCode customerName calledAt');
+  }).select('tokenCode');
 
   const nowServing = nowServingDoc
     ? {
-        _id: nowServingDoc._id,
         tokenCode: nowServingDoc.tokenCode,
-        customerName: nowServingDoc.customerName,
-        calledAt: nowServingDoc.calledAt,
       }
     : null;
 
@@ -500,7 +499,7 @@ async function getQueueSnapshot(serviceId) {
       Token.countDocuments({ service: serviceId, dateKey, status: 'serving' }),
     ]);
 
-  // Now serving token
+  // Now serving token (includes details for authorized admin view)
   const nowServingDoc = await Token.findOne({
     service: serviceId,
     dateKey,
@@ -596,4 +595,3 @@ module.exports = {
   resetQueue,
   getQueueSnapshot,
 };
-

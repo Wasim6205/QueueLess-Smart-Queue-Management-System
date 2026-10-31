@@ -1,11 +1,22 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const connectDB = require('./config/db');
 const { initSocket } = require('./sockets/socket');
 const errorHandler = require('./middleware/errorHandler');
+const { apiLimiter } = require('./middleware/rateLimiter');
 
+// Check required JWT_SECRET before starting
+if (!process.env.JWT_SECRET) {
+  console.error('[FATAL] JWT_SECRET environment variable is missing. Server refusing to start.');
+  process.exit(1);
+}
+
+const authRouter = require('./routes/auth.routes');
 const servicesRouter = require('./routes/services.routes');
 const tokensRouter = require('./routes/tokens.routes');
 const adminRouter = require('./routes/admin.routes');
@@ -20,25 +31,28 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 // Socket.IO
 initSocket(server, CLIENT_ORIGIN);
 
-// CORS
+// Security Headers with Helmet
+app.use(helmet());
+
+// CORS - allow strictly CLIENT_ORIGIN
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1') || origin === CLIENT_ORIGIN) {
-        return callback(null, true);
-      }
-      return callback(null, true);
-    },
+    origin: CLIENT_ORIGIN,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
     credentials: true,
   })
 );
-app.use(express.json());
+
+// Payload size limit
+app.use(express.json({ limit: '10kb' }));
+
+// General Rate Limiter on all /api routes
+app.use('/api', apiLimiter);
 
 // Dev request logger
 app.use((req, res, next) => {
   if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) {
-    console.log(`[Mutation] ${req.method} ${req.originalUrl}`, req.body || {});
+    console.log(`[Mutation] ${req.method} ${req.originalUrl}`);
   }
   next();
 });
@@ -48,6 +62,7 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 // REST Routes
+app.use('/api/auth', authRouter);
 app.use('/api/services', servicesRouter);
 app.use('/api/tokens', tokensRouter);
 app.use('/api/admin', adminRouter);

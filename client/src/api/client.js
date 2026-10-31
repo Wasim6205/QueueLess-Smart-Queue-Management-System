@@ -10,6 +10,33 @@ const api = axios.create({
   timeout: 10000,
 });
 
+// Request interceptor: attach Bearer token if present
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('queueless:token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Response interceptor: handle 401 unauthenticated
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      const url = error.config?.url || '';
+      // If a protected route received 401, clear stored token
+      if (url.includes('/admin') || url.includes('/auth/me')) {
+        localStorage.removeItem('queueless:token');
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+          window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Helper to format API errors consistently
 export function getErrorMessage(error) {
   if (error.response?.data?.error?.message) {
@@ -20,6 +47,17 @@ export function getErrorMessage(error) {
   }
   return error.message || 'An unexpected error occurred. Please try again.';
 }
+
+export const authApi = {
+  login: async ({ email, password }) => {
+    const res = await api.post('/auth/login', { email, password });
+    return res.data;
+  },
+  me: async () => {
+    const res = await api.get('/auth/me');
+    return res.data;
+  },
+};
 
 export const servicesApi = {
   list: async () => {
@@ -79,4 +117,3 @@ export const adminApi = {
 };
 
 export default api;
-
