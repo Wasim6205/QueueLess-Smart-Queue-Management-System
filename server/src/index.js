@@ -20,10 +20,15 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 // Socket.IO
 initSocket(server, CLIENT_ORIGIN);
 
-// Middleware
+// CORS
 app.use(
   cors({
-    origin: CLIENT_ORIGIN,
+    origin: (origin, callback) => {
+      if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1') || origin === CLIENT_ORIGIN) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
     credentials: true,
   })

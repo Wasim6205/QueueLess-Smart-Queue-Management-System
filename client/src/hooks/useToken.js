@@ -8,6 +8,7 @@ export function useToken(tokenId, onNotify) {
   const [error, setError] = useState(null);
   const requestIdRef = useRef(0);
   const onNotifyRef = useRef(onNotify);
+  const serviceIdRef = useRef(null);
 
   useEffect(() => {
     onNotifyRef.current = onNotify;
@@ -23,6 +24,11 @@ export function useToken(tokenId, onNotify) {
       if (currentReqId === requestIdRef.current) {
         setData(details);
         setError(null);
+        if (details?.token?.service) {
+          const sId = details.token.service._id || details.token.service;
+          serviceIdRef.current = sId;
+          socket.emit('join:service', { serviceId: sId });
+        }
       }
     } catch (err) {
       if (currentReqId === requestIdRef.current) {
@@ -42,15 +48,15 @@ export function useToken(tokenId, onNotify) {
 
     function joinRooms() {
       socket.emit('join:token', { tokenId });
-      if (data?.token?.service) {
-        socket.emit('join:service', { serviceId: data.token.service });
+      if (serviceIdRef.current) {
+        socket.emit('join:service', { serviceId: serviceIdRef.current });
       }
     }
 
     joinRooms();
 
     function onQueueUpdated(payload) {
-      if (!payload?.serviceId || payload.serviceId === data?.token?.service) {
+      if (!payload?.serviceId || payload.serviceId === serviceIdRef.current) {
         fetchToken(false);
       }
     }
@@ -61,7 +67,7 @@ export function useToken(tokenId, onNotify) {
           try {
             navigator.vibrate(200);
           } catch (e) {
-            // ignore if unsupported/blocked
+            // vibration not supported / disallowed
           }
         }
         if (onNotifyRef.current) {
@@ -80,7 +86,7 @@ export function useToken(tokenId, onNotify) {
       socket.off('token:notify', onTokenNotify);
       socket.off('connect', joinRooms);
     };
-  }, [tokenId, data?.token?.service, fetchToken]);
+  }, [tokenId, fetchToken]);
 
   return {
     data,
@@ -89,4 +95,3 @@ export function useToken(tokenId, onNotify) {
     refetch: () => fetchToken(false),
   };
 }
-

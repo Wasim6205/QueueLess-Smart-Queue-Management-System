@@ -51,6 +51,7 @@ export function useQueue(serviceId) {
     socket.on('connect', joinRoom);
 
     return () => {
+      socket.emit('leave:service', { serviceId });
       socket.off('queue:updated', onQueueUpdated);
       socket.off('connect', joinRoom);
     };
@@ -63,4 +64,3 @@ export function useQueue(serviceId) {
     refetch: () => fetchQueue(false),
   };
 }
-
