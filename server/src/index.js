@@ -92,9 +92,63 @@ app.use((req, res, next) => {
 // Central error handler
 app.use(errorHandler);
 
+const User = require('./models/User');
+const Service = require('./models/Service');
+const bcrypt = require('bcryptjs');
+
+async function autoSeedIfEmpty() {
+  try {
+    const userCount = await User.countDocuments();
+    if (userCount === 0) {
+      console.log('[AutoSeed] No users found in database. Initializing default owner & staff accounts...');
+      const ownerEmail = process.env.OWNER_EMAIL || 'owner@queueless.com';
+      const ownerPassword = process.env.OWNER_PASSWORD || 'OwnerSecurePass123!';
+      const staffEmail = process.env.STAFF_EMAIL || 'staff@queueless.com';
+      const staffPassword = process.env.STAFF_PASSWORD || 'StaffSecurePass123!';
+
+      const ownerHash = await bcrypt.hash(ownerPassword, 10);
+      const staffHash = await bcrypt.hash(staffPassword, 10);
+
+      await User.insertMany([
+        {
+          name: 'Clinic Owner',
+          email: ownerEmail.toLowerCase(),
+          passwordHash: ownerHash,
+          role: 'owner',
+          isActive: true,
+        },
+        {
+          name: 'Reception Staff',
+          email: staffEmail.toLowerCase(),
+          passwordHash: staffHash,
+          role: 'staff',
+          isActive: true,
+        },
+      ]);
+      console.log(`[AutoSeed] Seeded default owner (${ownerEmail}) and staff (${staffEmail}).`);
+    }
+
+    const serviceCount = await Service.countDocuments();
+    if (serviceCount === 0) {
+      console.log('[AutoSeed] No services found. Initializing 4 default services...');
+      const demoServices = [
+        { name: 'General Consultation', prefix: 'A', avgServiceMinutes: 5, isActive: true, isOpen: true, maxTokensPerDay: 50 },
+        { name: 'Dental Checkup', prefix: 'B', avgServiceMinutes: 10, isActive: true, isOpen: true, maxTokensPerDay: 50 },
+        { name: 'Salon — Haircut', prefix: 'C', avgServiceMinutes: 15, isActive: true, isOpen: true, maxTokensPerDay: 50 },
+        { name: 'Service Centre — Repair', prefix: 'D', avgServiceMinutes: 20, isActive: true, isOpen: true, maxTokensPerDay: 50 },
+      ];
+      await Service.insertMany(demoServices);
+      console.log('[AutoSeed] Seeded 4 default services.');
+    }
+  } catch (err) {
+    console.error('[AutoSeed Warning]', err.message);
+  }
+}
+
 // Bootstrap Server
 if (process.env.NODE_ENV !== 'test') {
-  connectDB().then(() => {
+  connectDB().then(async () => {
+    await autoSeedIfEmpty();
     server.listen(PORT, () => {
       console.log(`[Server] QueueLess backend running on http://localhost:${PORT}`);
     });
