@@ -57,7 +57,18 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check
+// Root status route & Health check
+app.get('/', (req, res) => {
+  res.json({
+    status: 'online',
+    message: 'QueueLess API & WebSocket server is running.',
+    health: '/health',
+    endpoints: {
+      services: '/api/services',
+      auth: '/api/auth',
+    },
+  });
+});
 app.get('/health', (req, res) => res.json({ ok: true }));
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
